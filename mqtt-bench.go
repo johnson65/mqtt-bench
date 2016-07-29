@@ -17,7 +17,7 @@ import (
 
 const baseTopic string = "/mqtt-bench/benchmark"
 
-var debug bool = false
+var debug = false
 
 // Apollo用に、Subscribe時のDefaultHandlerの処理結果を保持できるようにする。
 var defaultHandlerResults []*subscribeResult
@@ -260,7 +260,7 @@ type subscribeResult struct {
 
 // メッセージを受信する。
 func subscribe(client *MQTT.Client, topic string, qos byte) *subscribeResult {
-	var result *subscribeResult = &subscribeResult{}
+	var result = &subscribeResult{}
 	result.Count = 0
 
 	var handler MQTT.MessageHandler = func(client *MQTT.Client, msg MQTT.Message) {
@@ -327,7 +327,7 @@ func connect(id int, execOpts execOptions) *MQTT.Client {
 	if execOpts.UseDefaultHandler == true {
 		// Apollo(1.7.1利用)の場合、DefaultPublishHandlerを指定しないと、Subscribeできない。
 		// ただし、指定した場合でもretainされたメッセージは最初の1度しか取得されず、2回目以降のアクセスでは空になる点に注意。
-		var result *subscribeResult = &subscribeResult{}
+		var result = &subscribeResult{}
 		result.Count = 0
 
 		var handler MQTT.MessageHandler = func(client *MQTT.Client, msg MQTT.Message) {
