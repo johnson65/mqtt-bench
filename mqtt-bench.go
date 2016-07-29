@@ -358,10 +358,10 @@ func AsyncDisconnect(clients []*MQTT.Client) {
 
 	for _, client := range clients {
 		wg.Add(1)
-		go func() {
+		go func(c *MQTT.Client) {
 			defer wg.Done()
-			Disconnect(client)
-		}()
+			Disconnect(c)
+		}(client)
 	}
 
 	wg.Wait()
