@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const BASE_TOPIC string = "/mqtt-bench/benchmark"
+const baseTopic string = "/mqtt-bench/benchmark"
 
 var Debug bool = false
 
@@ -385,7 +385,7 @@ func main() {
 	action := flag.String("action", "p|pub or s|sub", "Publish or Subscribe or Subscribe(with publishing) (required)")
 	qos := flag.Int("qos", 0, "MQTT QoS(0|1|2)")
 	retain := flag.Bool("retain", false, "MQTT Retain")
-	topic := flag.String("topic", BASE_TOPIC, "Base topic")
+	topic := flag.String("topic", baseTopic, "Base topic")
 	username := flag.String("broker-username", "", "Username for connecting to the MQTT broker")
 	password := flag.String("broker-password", "", "Password for connecting to the MQTT broker")
 	tls := flag.String("tls", "", "TLS mode. 'server:certFile' or 'client:rootCAFile,clientCertFile,clientKeyFile'")
