@@ -17,7 +17,7 @@ import (
 
 const baseTopic string = "/mqtt-bench/benchmark"
 
-var debug = false
+var isDebug = false
 
 // Apollo用に、Subscribe時のDefaultHandlerの処理結果を保持できるようにする。
 var defaultHandlerResults []*subscribeResult
@@ -168,7 +168,7 @@ func publishAllClient(clients []*MQTT.Client, opts execOptions, param ...string)
 			for index := 0; index < opts.Count; index++ {
 				topic := fmt.Sprintf(opts.Topic+"/%d", clientId)
 
-				if debug {
+				if isDebug {
 					fmt.Printf("Publish : id=%d, count=%d, topic=%s\n", clientId, index, topic)
 				}
 				publish(client, topic, opts.Qos, opts.Retain, message)
@@ -223,7 +223,7 @@ func subscribeAllClient(clients []*MQTT.Client, opts execOptions, param ...strin
 			for results[clientId].Count < opts.Count {
 				loop++
 
-				if debug {
+				if isDebug {
 					fmt.Printf("Subscribe : id=%d, count=%d, topic=%s\n", clientId, results[clientId].Count, topic)
 				}
 
@@ -265,7 +265,7 @@ func subscribe(client *MQTT.Client, topic string, qos byte) *subscribeResult {
 
 	var handler MQTT.MessageHandler = func(client *MQTT.Client, msg MQTT.Message) {
 		result.Count++
-		if debug {
+		if isDebug {
 			fmt.Printf("Received message : topic=%s, message=%s\n", msg.Topic(), msg.Payload())
 		}
 	}
@@ -332,7 +332,7 @@ func connect(id int, execOpts execOptions) *MQTT.Client {
 
 		var handler MQTT.MessageHandler = func(client *MQTT.Client, msg MQTT.Message) {
 			result.Count++
-			if debug {
+			if isDebug {
 				fmt.Printf("Received at defaultHandler : topic=%s, message=%s\n", msg.Topic(), msg.Payload())
 			}
 		}
@@ -479,7 +479,7 @@ func main() {
 	execOpts.PreTime = *preTime
 	execOpts.IntervalTime = *intervalTime
 
-	debug = *debug
+	isDebug = *debug
 
 	switch method {
 	case "pub":
