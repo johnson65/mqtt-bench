@@ -17,20 +17,20 @@ import (
 
 const baseTopic string = "/mqtt-bench/benchmark"
 
-var Debug bool = false
+var debug bool = false
 
 // Apollo用に、Subscribe時のDefaultHandlerの処理結果を保持できるようにする。
-var DefaultHandlerResults []*SubscribeResult
+var defaultHandlerResults []*subscribeResult
 
 // 実行オプション
-type ExecOptions struct {
+type execOptions struct {
 	Broker            string     // Broker URI
 	Qos               byte       // QoS(0|1|2)
 	Retain            bool       // Retain
 	Topic             string     // Topicのルート
 	Username          string     // ユーザID
 	Password          string     // パスワード
-	CertConfig        CertConfig // 認証定義
+	CertConfig        certConfig // 認証定義
 	ClientNum         int        // クライアントの同時実行数
 	Count             int        // 1クライアント当たりのメッセージ数
 	MessageSize       int        // 1メッセージのサイズ(byte)
@@ -40,17 +40,17 @@ type ExecOptions struct {
 }
 
 // 認証設定
-type CertConfig interface{}
+type certConfig interface{}
 
 // サーバ認証設定
-type ServerCertConfig struct {
-	CertConfig
+type serverCertConfig struct {
+	certConfig
 	ServerCertFile string // サーバ証明書ファイル
 }
 
 // クライアント認証設定
-type ClientCertConfig struct {
-	CertConfig
+type clientCertConfig struct {
+	certConfig
 	RootCAFile     string // ルート証明書ファイル
 	ClientCertFile string // クライアント証明書ファイル
 	ClientKeyFile  string // クライアント公開鍵ファイル
@@ -58,7 +58,7 @@ type ClientCertConfig struct {
 
 // サーバ証明書用のTLS設定を生成する。
 //   serverCertFile : サーバ証明書のファイル
-func CreateServerTlsConfig(serverCertFile string) *tls.Config {
+func createServerTlsConfig(serverCertFile string) *tls.Config {
 	certpool := x509.NewCertPool()
 	pem, err := ioutil.ReadFile(serverCertFile)
 	if err == nil {
@@ -74,7 +74,7 @@ func CreateServerTlsConfig(serverCertFile string) *tls.Config {
 //   rootCAFile     : ルート証明書ファイル
 //   clientCertFile : クライアント証明書ファイル
 //   clientKeyFile  : クライアント公開鍵ファイル
-func CreateClientTlsConfig(rootCAFile string, clientCertFile string, clientKeyFile string) *tls.Config {
+func createClientTlsConfig(rootCAFile string, clientCertFile string, clientKeyFile string) *tls.Config {
 	certpool := x509.NewCertPool()
 	rootCA, err := ioutil.ReadFile(rootCAFile)
 	if err == nil {
@@ -100,16 +100,16 @@ func CreateClientTlsConfig(rootCAFile string, clientCertFile string, clientKeyFi
 }
 
 // 実行する。
-func Execute(exec func(clients []*MQTT.Client, opts ExecOptions, param ...string) int, opts ExecOptions) {
-	message := CreateFixedSizeMessage(opts.MessageSize)
+func execute(exec func(clients []*MQTT.Client, opts execOptions, param ...string) int, opts execOptions) {
+	message := createFixedSizeMessage(opts.MessageSize)
 
 	// 配列を初期化
-	DefaultHandlerResults = make([]*SubscribeResult, opts.ClientNum)
+	defaultHandlerResults = make([]*subscribeResult, opts.ClientNum)
 
 	clients := make([]*MQTT.Client, opts.ClientNum)
 	hasErr := false
 	for i := 0; i < opts.ClientNum; i++ {
-		client := Connect(i, opts)
+		client := connect(i, opts)
 		if client == nil {
 			hasErr = true
 			break
@@ -122,7 +122,7 @@ func Execute(exec func(clients []*MQTT.Client, opts ExecOptions, param ...string
 		for i := 0; i < len(clients); i++ {
 			client := clients[i]
 			if client != nil {
-				Disconnect(client)
+				disconnect(client)
 			}
 		}
 		return
@@ -140,7 +140,7 @@ func Execute(exec func(clients []*MQTT.Client, opts ExecOptions, param ...string
 	fmt.Printf("%s End benchmark\n", time.Now())
 
 	// 切断に時間がかかるため、非同期で処理を行う。
-	AsyncDisconnect(clients)
+	asyncDisconnect(clients)
 
 	// 処理結果を出力する。
 	duration := (endTime.Sub(startTime)).Nanoseconds() / int64(1000000) // nanosecond -> millisecond
@@ -151,7 +151,7 @@ func Execute(exec func(clients []*MQTT.Client, opts ExecOptions, param ...string
 
 // 全クライアントに対して、publishの処理を行う。
 // 送信したメッセージ数を返す（原則、クライアント数分となる）。
-func PublishAllClient(clients []*MQTT.Client, opts ExecOptions, param ...string) int {
+func publishAllClient(clients []*MQTT.Client, opts execOptions, param ...string) int {
 	message := param[0]
 
 	wg := new(sync.WaitGroup)
@@ -168,10 +168,10 @@ func PublishAllClient(clients []*MQTT.Client, opts ExecOptions, param ...string)
 			for index := 0; index < opts.Count; index++ {
 				topic := fmt.Sprintf(opts.Topic+"/%d", clientId)
 
-				if Debug {
+				if debug {
 					fmt.Printf("Publish : id=%d, count=%d, topic=%s\n", clientId, index, topic)
 				}
-				Publish(client, topic, opts.Qos, opts.Retain, message)
+				publish(client, topic, opts.Qos, opts.Retain, message)
 				totalCount++
 
 				if opts.IntervalTime > 0 {
@@ -187,7 +187,7 @@ func PublishAllClient(clients []*MQTT.Client, opts ExecOptions, param ...string)
 }
 
 // メッセージを送信する。
-func Publish(client *MQTT.Client, topic string, qos byte, retain bool, message string) {
+func publish(client *MQTT.Client, topic string, qos byte, retain bool, message string) {
 	token := client.Publish(topic, qos, retain, message)
 
 	if token.Wait() && token.Error() != nil {
@@ -198,22 +198,22 @@ func Publish(client *MQTT.Client, topic string, qos byte, retain bool, message s
 // 全クライアントに対して、subscribeの処理を行う。
 // 指定されたカウント数分、メッセージを受信待ちする（メッセージが取得できない場合はカウントされない）。
 // この処理では、Publishし続けながら、Subscribeの処理を行う。
-func SubscribeAllClient(clients []*MQTT.Client, opts ExecOptions, param ...string) int {
+func subscribeAllClient(clients []*MQTT.Client, opts execOptions, param ...string) int {
 	wg := new(sync.WaitGroup)
 
-	results := make([]*SubscribeResult, len(clients))
+	results := make([]*subscribeResult, len(clients))
 	for id := 0; id < len(clients); id++ {
 		wg.Add(1)
 
 		client := clients[id]
 		topic := fmt.Sprintf(opts.Topic+"/%d", id)
 
-		results[id] = Subscribe(client, topic, opts.Qos)
+		results[id] = subscribe(client, topic, opts.Qos)
 
 		// DefaultHandlerを利用する場合は、Subscribe個別のHandlerではなく、
 		// DefaultHandlerの処理結果を参照する。
 		if opts.UseDefaultHandler == true {
-			results[id] = DefaultHandlerResults[id]
+			results[id] = defaultHandlerResults[id]
 		}
 
 		go func(clientId int) {
@@ -223,7 +223,7 @@ func SubscribeAllClient(clients []*MQTT.Client, opts ExecOptions, param ...strin
 			for results[clientId].Count < opts.Count {
 				loop++
 
-				if Debug {
+				if debug {
 					fmt.Printf("Subscribe : id=%d, count=%d, topic=%s\n", clientId, results[clientId].Count, topic)
 				}
 
@@ -254,18 +254,18 @@ func SubscribeAllClient(clients []*MQTT.Client, opts ExecOptions, param ...strin
 }
 
 // Subscribeの処理結果
-type SubscribeResult struct {
+type subscribeResult struct {
 	Count int // 受信メッセージ数
 }
 
 // メッセージを受信する。
-func Subscribe(client *MQTT.Client, topic string, qos byte) *SubscribeResult {
-	var result *SubscribeResult = &SubscribeResult{}
+func subscribe(client *MQTT.Client, topic string, qos byte) *subscribeResult {
+	var result *subscribeResult = &subscribeResult{}
 	result.Count = 0
 
 	var handler MQTT.MessageHandler = func(client *MQTT.Client, msg MQTT.Message) {
 		result.Count++
-		if Debug {
+		if debug {
 			fmt.Printf("Received message : topic=%s, message=%s\n", msg.Topic(), msg.Payload())
 		}
 	}
@@ -280,7 +280,7 @@ func Subscribe(client *MQTT.Client, topic string, qos byte) *SubscribeResult {
 }
 
 // 固定サイズのメッセージを生成する。
-func CreateFixedSizeMessage(size int) string {
+func createFixedSizeMessage(size int) string {
 	var buffer bytes.Buffer
 	for i := 0; i < size; i++ {
 		buffer.WriteString(strconv.Itoa(i % 10))
@@ -292,7 +292,7 @@ func CreateFixedSizeMessage(size int) string {
 
 // 指定されたBrokerへ接続し、そのMQTTクライアントを返す。
 // 接続に失敗した場合は nil を返す。
-func Connect(id int, execOpts ExecOptions) *MQTT.Client {
+func connect(id int, execOpts execOptions) *MQTT.Client {
 
 	// 複数プロセスで、ClientIDが重複すると、Broker側で問題となるため、
 	// プロセスIDを利用して、IDを割り振る。
@@ -314,11 +314,11 @@ func Connect(id int, execOpts ExecOptions) *MQTT.Client {
 	// TLSの設定
 	certConfig := execOpts.CertConfig
 	switch c := certConfig.(type) {
-	case ServerCertConfig:
-		tlsConfig := CreateServerTlsConfig(c.ServerCertFile)
+	case serverCertConfig:
+		tlsConfig := createServerTlsConfig(c.ServerCertFile)
 		opts.SetTLSConfig(tlsConfig)
-	case ClientCertConfig:
-		tlsConfig := CreateClientTlsConfig(c.RootCAFile, c.ClientCertFile, c.ClientKeyFile)
+	case clientCertConfig:
+		tlsConfig := createClientTlsConfig(c.RootCAFile, c.ClientCertFile, c.ClientKeyFile)
 		opts.SetTLSConfig(tlsConfig)
 	default:
 		// do nothing.
@@ -327,18 +327,18 @@ func Connect(id int, execOpts ExecOptions) *MQTT.Client {
 	if execOpts.UseDefaultHandler == true {
 		// Apollo(1.7.1利用)の場合、DefaultPublishHandlerを指定しないと、Subscribeできない。
 		// ただし、指定した場合でもretainされたメッセージは最初の1度しか取得されず、2回目以降のアクセスでは空になる点に注意。
-		var result *SubscribeResult = &SubscribeResult{}
+		var result *subscribeResult = &subscribeResult{}
 		result.Count = 0
 
 		var handler MQTT.MessageHandler = func(client *MQTT.Client, msg MQTT.Message) {
 			result.Count++
-			if Debug {
+			if debug {
 				fmt.Printf("Received at defaultHandler : topic=%s, message=%s\n", msg.Topic(), msg.Payload())
 			}
 		}
 		opts.SetDefaultPublishHandler(handler)
 
-		DefaultHandlerResults[id] = result
+		defaultHandlerResults[id] = result
 	}
 
 	client := MQTT.NewClient(opts)
@@ -353,14 +353,14 @@ func Connect(id int, execOpts ExecOptions) *MQTT.Client {
 }
 
 // 非同期でBrokerとの接続を切断する。
-func AsyncDisconnect(clients []*MQTT.Client) {
+func asyncDisconnect(clients []*MQTT.Client) {
 	wg := new(sync.WaitGroup)
 
 	for _, client := range clients {
 		wg.Add(1)
 		go func(c *MQTT.Client) {
 			defer wg.Done()
-			Disconnect(c)
+			disconnect(c)
 		}(client)
 	}
 
@@ -368,14 +368,14 @@ func AsyncDisconnect(clients []*MQTT.Client) {
 }
 
 // Brokerとの接続を切断する。
-func Disconnect(client *MQTT.Client) {
+func disconnect(client *MQTT.Client) {
 	client.Disconnect(10)
 }
 
 // ファイルの存在チェックを行う。
 // ファイルが存在する場合はtrue、存在しない場合はfalseを返す。
 //   filePath : 存在をチェックするファイルのパス
-func FileExists(filePath string) bool {
+func fileExists(filePath string) bool {
 	_, err := os.Stat(filePath)
 	return err == nil
 }
@@ -424,18 +424,18 @@ func main() {
 	}
 
 	// parse TLS mode
-	var certConfig CertConfig = nil
+	var certConfig certConfig = nil
 	if *tls == "" {
 		// nil
 	} else if strings.HasPrefix(*tls, "server:") {
 		var strArray = strings.Split(*tls, "server:")
 		serverCertFile := strings.TrimSpace(strArray[1])
-		if FileExists(serverCertFile) == false {
+		if fileExists(serverCertFile) == false {
 			fmt.Printf("File is not found. : certFile -> %s\n", serverCertFile)
 			return
 		}
 
-		certConfig = ServerCertConfig{
+		certConfig = serverCertConfig{
 			ServerCertFile: serverCertFile}
 	} else if strings.HasPrefix(*tls, "client:") {
 		var strArray = strings.Split(*tls, "client:")
@@ -443,20 +443,20 @@ func main() {
 		rootCAFile := strings.TrimSpace(configArray[0])
 		clientCertFile := strings.TrimSpace(configArray[1])
 		clientKeyFile := strings.TrimSpace(configArray[2])
-		if FileExists(rootCAFile) == false {
+		if fileExists(rootCAFile) == false {
 			fmt.Printf("File is not found. : rootCAFile -> %s\n", rootCAFile)
 			return
 		}
-		if FileExists(clientCertFile) == false {
+		if fileExists(clientCertFile) == false {
 			fmt.Printf("File is not found. : clientCertFile -> %s\n", clientCertFile)
 			return
 		}
-		if FileExists(clientKeyFile) == false {
+		if fileExists(clientKeyFile) == false {
 			fmt.Printf("File is not found. : clientKeyFile -> %s\n", clientKeyFile)
 			return
 		}
 
-		certConfig = ClientCertConfig{
+		certConfig = clientCertConfig{
 			RootCAFile:     rootCAFile,
 			ClientCertFile: clientCertFile,
 			ClientKeyFile:  clientKeyFile}
@@ -464,7 +464,7 @@ func main() {
 		// nil
 	}
 
-	execOpts := ExecOptions{}
+	execOpts := execOptions{}
 	execOpts.Broker = *broker
 	execOpts.Qos = byte(*qos)
 	execOpts.Retain = *retain
@@ -479,12 +479,12 @@ func main() {
 	execOpts.PreTime = *preTime
 	execOpts.IntervalTime = *intervalTime
 
-	Debug = *debug
+	debug = *debug
 
 	switch method {
 	case "pub":
-		Execute(PublishAllClient, execOpts)
+		execute(publishAllClient, execOpts)
 	case "sub":
-		Execute(SubscribeAllClient, execOpts)
+		execute(subscribeAllClient, execOpts)
 	}
 }
