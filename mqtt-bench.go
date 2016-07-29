@@ -58,7 +58,7 @@ type clientCertConfig struct {
 
 // サーバ証明書用のTLS設定を生成する。
 //   serverCertFile : サーバ証明書のファイル
-func createServerTlsConfig(serverCertFile string) *tls.Config {
+func createServerTlSConfig(serverCertFile string) *tls.Config {
 	certpool := x509.NewCertPool()
 	pem, err := ioutil.ReadFile(serverCertFile)
 	if err == nil {
@@ -74,7 +74,7 @@ func createServerTlsConfig(serverCertFile string) *tls.Config {
 //   rootCAFile     : ルート証明書ファイル
 //   clientCertFile : クライアント証明書ファイル
 //   clientKeyFile  : クライアント公開鍵ファイル
-func createClientTlsConfig(rootCAFile string, clientCertFile string, clientKeyFile string) *tls.Config {
+func createClientTlSConfig(rootCAFile string, clientCertFile string, clientKeyFile string) *tls.Config {
 	certpool := x509.NewCertPool()
 	rootCA, err := ioutil.ReadFile(rootCAFile)
 	if err == nil {
@@ -298,11 +298,11 @@ func connect(id int, execOpts execOptions) *MQTT.Client {
 	// プロセスIDを利用して、IDを割り振る。
 	// mqttbench<プロセスIDの16進数値>-<クライアントの連番>
 	pid := strconv.FormatInt(int64(os.Getpid()), 16)
-	clientId := fmt.Sprintf("mqttbench%s-%d", pid, id)
+	clientID := fmt.Sprintf("mqttbench%s-%d", pid, id)
 
 	opts := MQTT.NewClientOptions()
 	opts.AddBroker(execOpts.Broker)
-	opts.SetClientID(clientId)
+	opts.SetClientID(clientID)
 
 	if execOpts.Username != "" {
 		opts.SetUsername(execOpts.Username)
@@ -315,10 +315,10 @@ func connect(id int, execOpts execOptions) *MQTT.Client {
 	certConfig := execOpts.CertConfig
 	switch c := certConfig.(type) {
 	case serverCertConfig:
-		tlsConfig := createServerTlsConfig(c.ServerCertFile)
+		tlsConfig := createServerTlSConfig(c.ServerCertFile)
 		opts.SetTLSConfig(tlsConfig)
 	case clientCertConfig:
-		tlsConfig := createClientTlsConfig(c.RootCAFile, c.ClientCertFile, c.ClientKeyFile)
+		tlsConfig := createClientTlSConfig(c.RootCAFile, c.ClientCertFile, c.ClientKeyFile)
 		opts.SetTLSConfig(tlsConfig)
 	default:
 		// do nothing.
