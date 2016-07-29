@@ -219,7 +219,7 @@ func subscribeAllClient(clients []*MQTT.Client, opts execOptions, param ...strin
 		go func(clientId int) {
 			defer wg.Done()
 
-			var loop int = 0
+			var loop int
 			for results[clientId].Count < opts.Count {
 				loop++
 
@@ -411,7 +411,7 @@ func main() {
 	}
 
 	// validate "action"
-	var method string = ""
+	var method string
 	if *action == "p" || *action == "pub" {
 		method = "pub"
 	} else if *action == "s" || *action == "sub" {
@@ -424,7 +424,7 @@ func main() {
 	}
 
 	// parse TLS mode
-	var certConfig certConfig = nil
+	var certConfig certConfig
 	if *tls == "" {
 		// nil
 	} else if strings.HasPrefix(*tls, "server:") {
